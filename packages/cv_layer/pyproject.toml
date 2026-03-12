@@ -4,4 +4,11 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "pdf2image>=1.17.0",
+    "pillow>=12.1.1",
+    "pytesseract>=0.3.13",
+    "torch>=2.10.0",
+    "torchvision>=0.25.0",
+    "transformers>=5.3.0",
+]
