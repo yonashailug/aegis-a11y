@@ -1,6 +1,8 @@
 import torch
 from transformers import LayoutLMv3Processor, LayoutLMv3ForTokenClassification
 from pydantic import BaseModel, Field
+from typing import List, Dict, Any
+from PIL import Image
 import uuid
 
 # Re-defining the Pydantic schema from our Phase 1 specs

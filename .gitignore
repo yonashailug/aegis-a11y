@@ -211,3 +211,5 @@ layoutlmv3-finetuned/
 docs/pdfs
 docs/specs
 docs/planning
+packages/reasoning-agent/integration_demo.py
+packages/reasoning-agent/verifier_demo.py

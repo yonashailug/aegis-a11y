@@ -15,15 +15,17 @@ async def health_check():
 @app.post("/api/v1/decompose")
 async def decompose_document():
     try:
-        images = convert_pdf_to_images("../../docs/pdfs/Resume.pdf")
+        images = convert_pdf_to_images("docs/pdfs/Resume.pdf")
         document_elements = []
 
         for image in images:
             ocr_data = extract_ocr_data(image)
+            print(ocr_data)
             page_elements = decomposer.decompose_image(image, ocr_data)
             document_elements.extend(page_elements)
         return {}
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
 def main():

@@ -1,0 +1,28 @@
+[project]
+name = "reconstruction"
+version = "0.1.0"
+description = "Structural reconstruction and document generation for Aegis-A11y"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "jinja2>=3.1.0",
+    "reportlab>=4.0.0",
+    "weasyprint>=60.0",
+    "lxml>=4.9.0",
+    "html5lib>=1.1",
+    "pydantic>=2.0.0",
+    "reasoning-agent",
+    "cv-layer"
+]
+
+[tool.uv.sources]
+reasoning-agent = { workspace = true }
+cv-layer = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "mypy>=1.0.0"
+]

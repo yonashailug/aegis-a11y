@@ -10,7 +10,8 @@ dependencies = [
     "uvicorn[standard]>=0.41.0",
     "api",
     "cv-layer",
-    "reasoning-agent"
+    "reasoning-agent",
+    "training-pipeline"
 ]
 
 [tool.uv.workspace]
@@ -22,7 +23,7 @@ members = [
 api = { workspace = true }
 cv-layer = { workspace = true }
 reasoning-agent = { workspace = true }
-
+training-pipeline = { workspace = true }
 [dependency-groups]
 dev = [
     "black>=26.3.0",
