@@ -1,5 +1,5 @@
 def main():
-    print("Hello from cv-layer!")
+    print("Hello from training-pipeline!")
 
 
 if __name__ == "__main__":

@@ -8,12 +8,20 @@ dependencies = [
     "fastapi>=0.135.1",
     "pydantic>=2.12.5",
     "uvicorn[standard]>=0.41.0",
+    "api",
+    "cv-layer",
+    "reasoning-agent"
 ]
 
 [tool.uv.workspace]
 members = [
     "packages/*",
 ]
+
+[tool.uv.sources]
+api = { workspace = true }
+cv-layer = { workspace = true }
+reasoning-agent = { workspace = true }
 
 [dependency-groups]
 dev = [

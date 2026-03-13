@@ -1,0 +1,25 @@
+ [project]
+  name = "reasoning-agent"
+  version = "0.1.0"
+  description = "Multi-modal semantic reasoning layer for educational content accessibility"
+  readme = "README.md"
+  requires-python = ">=3.14"
+  dependencies = [
+      "openai>=1.0.0",
+      "pydantic>=2.0.0",
+      "pillow>=10.0.0",
+      "httpx>=0.25.0",
+      "python-dotenv>=1.0.0",
+      "cv-layer"
+  ]
+
+  [tool.uv.sources]
+  cv-layer = { workspace = true }
+
+  [dependency-groups]
+  dev = [
+      "pytest>=7.0.0",
+      "pytest-asyncio>=0.21.0",
+      "black>=23.0.0",
+      "mypy>=1.0.0"
+  ]
