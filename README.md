@@ -63,9 +63,9 @@ OPENAI_API_KEY=your_openai_api_key_here
 ```bash
 # Check all components are properly installed
 uv run python -c "
-from packages.cv_layer import LayoutDecomposer
-from packages.reasoning_agent import SemanticReasoner
-from packages.reconstruction import DocumentReconstructionEngine
+from cv_layer import LayoutDecomposer
+from reasoning_agent import SemanticReasoner
+from reconstruction import DocumentReconstructionEngine
 print('✅ All components installed successfully')
 "
 ```
@@ -213,7 +213,7 @@ curl -X POST "http://localhost:8000/api/v1/decompose" \
      -H "Content-Type: application/json"
 ```
 
-## 🔬 DRR Pipeline Architecture
+## DRR Pipeline Architecture
 
 The Aegis-A11y system implements a three-phase **DRR (Decomposition-Reasoning-Reconstruction)** pipeline:
 
