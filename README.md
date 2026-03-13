@@ -2,7 +2,7 @@
 
 A hybrid LLM-Computer Vision framework for automated structural remediation of complex educational digital assets. This system transforms inaccessible PDFs into WCAG 2.1 AA compliant documents using advanced AI-powered semantic reasoning.
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
 # Clone and setup
@@ -22,13 +22,13 @@ uv run uvicorn packages.api.main:app --reload
 curl http://localhost:8000/
 ```
 
-## 📋 Prerequisites
+## Prerequisites
 
 - **Python 3.11+**
 - **UV package manager** - [Install UV](https://docs.astral.sh/uv/)
 - **OpenAI API key** - Required for semantic reasoning
 
-## 🔧 Installation & Development Setup
+## Installation & Development Setup
 
 ### 1. Environment Setup
 
@@ -70,7 +70,7 @@ print('✅ All components installed successfully')
 "
 ```
 
-## 🏃 Running the Application
+## Running the Application
 
 ### Start the API Server
 
@@ -101,7 +101,7 @@ Expected response:
 }
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 aegis-a11y/
@@ -141,7 +141,7 @@ aegis-a11y/
 └── README.md                  # This file
 ```
 
-## 🛠 API Reference
+## API Reference
 
 ### Endpoints
 
@@ -235,7 +235,7 @@ The Aegis-A11y system implements a three-phase **DRR (Decomposition-Reasoning-Re
 - **PDF/UA creation** with tagged structure
 - **Navigation generation** and metadata embedding
 
-## ⚙️ Configuration
+## Configuration
 
 ### Environment Variables
 
@@ -253,7 +253,7 @@ The system uses:
 - **GPT-4o** for semantic reasoning and alt-text generation
 - **Custom verification** rules for WCAG 2.1 AA compliance
 
-## 🧪 Development
+## Development
 
 ### Adding New Components
 
@@ -288,7 +288,7 @@ uv sync
 uv add --dev pytest
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -325,7 +325,7 @@ export LOG_LEVEL=DEBUG
 uv run uvicorn packages.api.main:app --reload
 ```
 
-## 📝 Sample Document Formats
+## Sample Document Formats
 
 The system processes educational PDFs and generates:
 
@@ -333,7 +333,7 @@ The system processes educational PDFs and generates:
 - **PDF/UA**: Universally accessible PDF format
 - **Structured metadata**: Subject-specific educational annotations
 
-## 🔧 Code Quality & Linting
+## Code Quality & Linting
 
 The project uses modern Python tooling for consistent code quality:
 
@@ -379,7 +379,7 @@ uv run --with mypy mypy packages/
 
 This ensures code quality and catches issues before they reach CI.
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/new-component`)
@@ -387,11 +387,11 @@ This ensures code quality and catches issues before they reach CI.
 4. Make changes and test thoroughly
 5. Submit a pull request
 
-## 📄 License
+## License
 
 [Add your license information here]
 
-## 🔗 Related Documentation
+## Related Documentation
 
 - [WCAG 2.1 AA Guidelines](https://www.w3.org/WAI/WCAG21/quickref/)
 - [Universal Design for Learning (UDL)](https://www.cast.org/impact/universal-design-for-learning-udl)
