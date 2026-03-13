@@ -21,10 +21,14 @@ dependencies = [
     { name = "api" },
     { name = "cv-layer" },
     { name = "fastapi" },
+    { name = "html5lib" },
+    { name = "lxml" },
     { name = "pydantic" },
     { name = "reasoning-agent" },
+    { name = "reportlab" },
     { name = "training-pipeline" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "weasyprint" },
 ]
 
 [package.dev-dependencies]
@@ -41,10 +45,14 @@ requires-dist = [
     { name = "api", editable = "packages/api" },
     { name = "cv-layer", editable = "packages/cv-layer" },
     { name = "fastapi", specifier = ">=0.135.1" },
+    { name = "html5lib", specifier = ">=1.1" },
+    { name = "lxml", specifier = ">=6.0.2" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "reasoning-agent", editable = "packages/reasoning-agent" },
+    { name = "reportlab", specifier = ">=4.4.10" },
     { name = "training-pipeline", editable = "packages/training-pipeline" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.41.0" },
+    { name = "weasyprint", specifier = ">=68.1" },
 ]
 
 [package.metadata.requires-dev]
@@ -92,6 +100,7 @@ version = "0.1.0"
 source = { editable = "packages/api" }
 dependencies = [
     { name = "cv-layer" },
+    { name = "reconstruction" },
 ]
 
 [package.dev-dependencies]
@@ -100,7 +109,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "cv-layer", editable = "packages/cv-layer" }]
+requires-dist = [
+    { name = "cv-layer", editable = "packages/cv-layer" },
+    { name = "reconstruction", editable = "packages/reconstruction" },
+]
 
 [package.metadata.requires-dev]
 dev = [{ name = "uvicorn", specifier = ">=0.41.0" }]
@@ -1224,7 +1236,7 @@ dev = [
 [[package]]
 name = "reconstruction"
 version = "0.1.0"
-source = { virtual = "packages/reconstruction" }
+source = { editable = "packages/reconstruction" }
 dependencies = [
     { name = "cv-layer" },
     { name = "html5lib" },

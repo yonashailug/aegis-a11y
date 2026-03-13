@@ -102,12 +102,29 @@ class JSONToTagMapper:
         # Extract bounding boxes and positions
         element_positions = {}
         for element in elements:
+            # Try to get bounding box from extracted_element or use original_layout as fallback
+            bbox = None
             if hasattr(element, 'extracted_element') and 'bounding_box' in element.extracted_element:
                 bbox = element.extracted_element['bounding_box']
-                element_positions[element.element_id] = {
-                    'x': bbox[0], 'y': bbox[1], 'width': bbox[2], 'height': bbox[3],
-                    'element': element
-                }
+            
+            # Fallback: find matching element in original layout
+            if not bbox and original_layout:
+                for layout_item in original_layout:
+                    if layout_item.get('bbox') and (
+                        element.element_id in str(layout_item) or 
+                        element.detected_subject_area.value in str(layout_item)
+                    ):
+                        bbox = layout_item['bbox']
+                        break
+            
+            # Use default position if no bbox found
+            if not bbox:
+                bbox = [0, len(element_positions) * 100, 500, 80]  # Stacked layout
+                
+            element_positions[element.element_id] = {
+                'x': bbox[0], 'y': bbox[1], 'width': bbox[2], 'height': bbox[3],
+                'element': element
+            }
         
         # Determine page dimensions
         page_width = max((pos['x'] + pos['width'] for pos in element_positions.values()), default=800)
@@ -197,7 +214,22 @@ class JSONToTagMapper:
         current_section = None
         
         for element in elements:
-            classification = element.extracted_element.get('classification', '').lower()
+            # Get classification from element_id or subject area as fallback
+            classification = ''
+            if hasattr(element, 'extracted_element') and 'classification' in element.extracted_element:
+                classification = element.extracted_element['classification'].lower()
+            elif 'title' in element.element_id:
+                classification = 'heading'
+            elif 'paragraph' in element.element_id:
+                classification = 'paragraph'
+            elif 'diagram' in element.element_id:
+                classification = 'functional_diagram'
+            elif 'equation' in element.element_id:
+                classification = 'equation'
+            elif 'list' in element.element_id:
+                classification = 'list'
+            else:
+                classification = 'paragraph'  # Default fallback
             
             if 'heading' in classification:
                 # Start new section
@@ -206,7 +238,7 @@ class JSONToTagMapper:
                 
                 current_section = {
                     'heading_id': element.element_id,
-                    'heading_text': element.extracted_element.get('ocr_text', ''),
+                    'heading_text': element.pedagogical_alt_text or '',
                     'elements': [element.element_id],
                     'start_y': positions.get(element.element_id, {}).get('y', 0)
                 }
@@ -260,8 +292,30 @@ class JSONToTagMapper:
     
     def _convert_element_to_structure(self, element: ReasoningOutput) -> DocumentStructure:
         """Convert a single reasoning output to document structure."""
-        classification = element.extracted_element.get('classification', '').lower()
-        ocr_text = element.extracted_element.get('ocr_text', '')
+        # Get classification from element_id as fallback
+        classification = ''
+        if hasattr(element, 'extracted_element') and 'classification' in element.extracted_element:
+            classification = element.extracted_element['classification'].lower()
+        elif 'title' in element.element_id:
+            classification = 'heading'
+        elif 'paragraph' in element.element_id:
+            classification = 'paragraph'
+        elif 'diagram' in element.element_id:
+            classification = 'functional_diagram'
+        elif 'equation' in element.element_id:
+            classification = 'equation'
+        elif 'list' in element.element_id:
+            classification = 'list'
+        else:
+            classification = 'paragraph'  # Default fallback
+            
+        # Get OCR text from extracted_element or use pedagogical_alt_text as fallback
+        ocr_text = ''
+        if hasattr(element, 'extracted_element') and 'ocr_text' in element.extracted_element:
+            ocr_text = element.extracted_element['ocr_text']
+        else:
+            # Use pedagogical_alt_text as content for display
+            ocr_text = element.pedagogical_alt_text
         
         # Map classification to HTML tag
         html_tag = self.tag_mapping.classification_to_tag.get(classification, 'div')
@@ -288,7 +342,7 @@ class JSONToTagMapper:
             attributes=attributes,
             content=ocr_text,
             alt_text=element.pedagogical_alt_text,
-            bounding_box=element.extracted_element.get('bounding_box'),
+            bounding_box=None,  # Will be set if available in layout context
             aria_label=element.pedagogical_alt_text if classification in ['functional_diagram', 'equation'] else None,
             subject_area=element.detected_subject_area.value,
             learning_objective=element.learning_objective,
@@ -322,7 +376,7 @@ class JSONToTagMapper:
     
     def _create_list_structure(self, element: ReasoningOutput) -> DocumentStructure:
         """Create list structure with proper list items."""
-        ocr_text = element.extracted_element.get('ocr_text', '')
+        ocr_text = element.pedagogical_alt_text or 'Content'
         
         # Parse list items from OCR text
         list_items = self._parse_list_items(ocr_text)
@@ -397,7 +451,7 @@ class JSONToTagMapper:
     
     def _create_table_structure(self, element: ReasoningOutput) -> DocumentStructure:
         """Create table structure with rows and cells."""
-        ocr_text = element.extracted_element.get('ocr_text', '')
+        ocr_text = element.pedagogical_alt_text or 'Content'
         
         # Parse table data (simplified - could be enhanced with more sophisticated parsing)
         table_data = self._parse_table_data(ocr_text)

@@ -10,12 +10,13 @@ from typing import List, Dict, Any
 def normalize_bbox(bbox: List[int], width: int, height: int) -> List[int]:
     """
     Normalizes bounding box coordinates to a 0-1000 scale for LayoutLMv3.
+    bbox format: [x0, y0, x1, y1]
     """
     return [
-        int(1000 * (bbox / width)),
-        int(1000 * (bbox[3] / height)),
-        int(1000 * (bbox[4] / width)),
-        int(1000 * (bbox[5] / height)),
+        int(1000 * (bbox[0] / width)),   # x0 normalized
+        int(1000 * (bbox[1] / height)), # y0 normalized  
+        int(1000 * (bbox[2] / width)),  # x1 normalized
+        int(1000 * (bbox[3] / height)), # y1 normalized
     ]
 
 def extract_ocr_data(image: Image.Image) -> Dict[str, Any]:

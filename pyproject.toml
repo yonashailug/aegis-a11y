@@ -11,7 +11,11 @@ dependencies = [
     "api",
     "cv-layer",
     "reasoning-agent",
-    "training-pipeline"
+    "training-pipeline",
+    "reportlab>=4.4.10",
+    "weasyprint>=68.1",
+    "lxml>=6.0.2",
+    "html5lib>=1.1",
 ]
 
 [tool.uv.workspace]
@@ -24,6 +28,8 @@ api = { workspace = true }
 cv-layer = { workspace = true }
 reasoning-agent = { workspace = true }
 training-pipeline = { workspace = true }
+reconstruction = { workspace = true }
+
 [dependency-groups]
 dev = [
     "black>=26.3.0",

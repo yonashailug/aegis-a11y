@@ -208,8 +208,9 @@ __marimo__/
 
 .DS_Store
 layoutlmv3-finetuned/
-docs/pdfs
-docs/specs
-docs/planning
+docs/
 packages/reasoning-agent/integration_demo.py
 packages/reasoning-agent/verifier_demo.py
+
+test_output.html
+test_output.pdf
