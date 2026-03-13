@@ -15,7 +15,7 @@ async def health_check():
 @app.post("/api/v1/decompose")
 async def decompose_document():
     try:
-        images = convert_pdf_to_images("docs/pdfs/Resume.pdf")
+        images = convert_pdf_to_images("docs/pdfs/sample.pdf")
         document_elements = []
 
         for image in images:
