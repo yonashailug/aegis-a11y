@@ -1,4 +1,4 @@
-from importlib.metadata import version, PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, version
 
 __all__ = ["LayoutDecomposer", "convert_pdf_to_images", "extract_ocr_data"]
 

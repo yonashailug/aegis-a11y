@@ -333,12 +333,59 @@ The system processes educational PDFs and generates:
 - **PDF/UA**: Universally accessible PDF format
 - **Structured metadata**: Subject-specific educational annotations
 
+## 🔧 Code Quality & Linting
+
+The project uses modern Python tooling for consistent code quality:
+
+### Available Commands
+```bash
+# Lint code (check for issues)
+uv run --with ruff ruff check packages/
+
+# Format code with black
+uv run --with black black packages/
+
+# Auto-fix linting issues
+uv run --with ruff ruff check --fix packages/
+
+# Run type checking
+uv run --with mypy mypy packages/
+
+# Complete workflow (format + lint + fix + typecheck)
+uv run --with black black packages/ && \
+uv run --with ruff ruff check --fix packages/ && \
+uv run --with mypy mypy packages/
+```
+
+### Tools Used
+- **Ruff**: Ultra-fast Python linter and formatter (replaces flake8, isort)
+- **Black**: Uncompromising code formatter
+- **MyPy**: Static type checking
+
+### Configuration
+All linting configuration is centralized in `pyproject.toml` at the project root:
+- Line length: 88 characters
+- Python target: 3.11+
+- Import sorting with first-party package recognition
+- Strict type checking with external library ignore patterns
+
+### Pre-commit Workflow
+Before committing changes, run:
+```bash
+uv run --with black black packages/ && \
+uv run --with ruff ruff check --fix packages/ && \
+uv run --with mypy mypy packages/
+```
+
+This ensures code quality and catches issues before they reach CI.
+
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/new-component`)
-3. Make changes and test thoroughly
-4. Submit a pull request
+3. **Run the complete linting workflow to ensure code quality**
+4. Make changes and test thoroughly
+5. Submit a pull request
 
 ## 📄 License
 

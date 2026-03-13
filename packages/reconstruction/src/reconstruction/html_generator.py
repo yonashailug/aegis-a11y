@@ -1,22 +1,23 @@
 """
 HTML5 Accessible Document Generator
 
-Based on technical paper Section 3.3: Generates WCAG 2.1 AA compliant 
+Based on technical paper Section 3.3: Generates WCAG 2.1 AA compliant
 HTML5 documents from structured document hierarchy.
 """
 
-from typing import Dict, List, Any, Optional
-import html
 from datetime import datetime
-from jinja2 import Environment, BaseLoader, Template
+import html
+from typing import Any
 
-from .schemas import DocumentStructure, ReconstructionInput, OutputFormat, AccessibilityStandard
+from jinja2 import BaseLoader, Environment
+
+from .schemas import DocumentStructure, ReconstructionInput
 
 
 class HTML5Generator:
     """
     Generates accessible HTML5 documents from document structure.
-    
+
     Implements WCAG 2.1 AA compliance requirements including:
     - Proper heading hierarchy
     - ARIA landmarks and roles
@@ -24,61 +25,65 @@ class HTML5Generator:
     - Keyboard navigation support
     - Screen reader compatibility
     """
-    
+
     def __init__(self):
         """Initialize the HTML5 generator."""
         self.jinja_env = Environment(loader=BaseLoader())
         self.accessibility_features = {
-            'skip_navigation': True,
-            'aria_landmarks': True,
-            'heading_hierarchy': True,
-            'alt_text_validation': True,
-            'keyboard_navigation': True,
-            'focus_indicators': True,
-            'color_contrast': True
+            "skip_navigation": True,
+            "aria_landmarks": True,
+            "heading_hierarchy": True,
+            "alt_text_validation": True,
+            "keyboard_navigation": True,
+            "focus_indicators": True,
+            "color_contrast": True,
         }
-        
-    def generate_html5_document(self, 
-                               document_structure: DocumentStructure,
-                               reconstruction_input: ReconstructionInput) -> str:
+
+    def generate_html5_document(
+        self,
+        document_structure: DocumentStructure,
+        reconstruction_input: ReconstructionInput,
+    ) -> str:
         """
         Generate complete HTML5 document from structure.
-        
+
         Args:
             document_structure: Hierarchical document structure
             reconstruction_input: Original reconstruction input with metadata
-            
+
         Returns:
             Complete HTML5 document as string
         """
         # Build document metadata
         metadata = self._build_document_metadata(reconstruction_input)
-        
+
         # Generate CSS styles for accessibility
         css_styles = self._generate_accessibility_css()
-        
+
         # Generate JavaScript for enhanced accessibility
         javascript = self._generate_accessibility_javascript()
-        
+
         # Build HTML structure
         html_content = self._build_html_structure(
             document_structure, metadata, css_styles, javascript
         )
-        
+
         return html_content
-    
-    def _build_document_metadata(self, reconstruction_input: ReconstructionInput) -> Dict[str, Any]:
+
+    def _build_document_metadata(
+        self, reconstruction_input: ReconstructionInput
+    ) -> dict[str, Any]:
         """Build document metadata for HTML head section."""
         return {
-            'title': html.escape(reconstruction_input.document_title),
-            'language': reconstruction_input.document_language,
-            'subject_area': reconstruction_input.subject_area,
-            'educational_level': reconstruction_input.educational_level,
-            'generated_at': datetime.now().isoformat(),
-            'generator': 'Aegis-A11y Reconstruction Engine v0.1.0',
-            'accessibility_standard': reconstruction_input.accessibility_standard.value
+            "title": html.escape(reconstruction_input.document_title),
+            "language": reconstruction_input.document_language,
+            "subject_area": reconstruction_input.subject_area,
+            "educational_level": reconstruction_input.educational_level,
+            "generated_at": datetime.now().isoformat(),
+            "generator": "Aegis-A11y Reconstruction Engine v0.1.0",
+            "accessibility_standard": reconstruction_input.accessibility_standard.value,
         }
-    
+
     def _generate_accessibility_css(self) -> str:
         """Generate CSS for accessibility features."""
         return """
@@ -292,7 +297,7 @@ h6 { font-size: 1em; font-weight: bold; }
     }
 }
 """
-    
+
     def _generate_accessibility_javascript(self) -> str:
         """Generate JavaScript for enhanced accessibility features."""
         return """
@@ -437,14 +442,16 @@ h6 { font-size: 1em; font-weight: bold; }
     };
 })();
 """
-    
-    def _build_html_structure(self,
-                             document_structure: DocumentStructure,
-                             metadata: Dict[str, Any],
-                             css_styles: str,
-                             javascript: str) -> str:
+
+    def _build_html_structure(
+        self,
+        document_structure: DocumentStructure,
+        metadata: dict[str, Any],
+        css_styles: str,
+        javascript: str,
+    ) -> str:
         """Build the complete HTML document structure."""
-        
+
         # HTML document template
         html_template = """<!DOCTYPE html>
 <html lang="{{ metadata.language }}" class="no-js">
@@ -507,59 +514,64 @@ h6 { font-size: 1em; font-weight: bold; }
     </script>
 </body>
 </html>"""
-        
+
         # Generate body content from document structure
         body_content = self._render_document_structure(document_structure)
-        
+
         # Render complete template
         template = self.jinja_env.from_string(html_template)
         return template.render(
             metadata=metadata,
             css_styles=css_styles,
             javascript=javascript,
-            body_content=body_content
+            body_content=body_content,
         )
-    
-    def _render_document_structure(self, structure: DocumentStructure, indent_level: int = 1) -> str:
+
+    def _render_document_structure(
+        self, structure: DocumentStructure, indent_level: int = 1
+    ) -> str:
         """Recursively render document structure to HTML."""
         indent = "    " * indent_level
-        
+
         # Handle special cases
         if structure.element_type == "html":
             # Root element - render children only
-            return "\n".join(self._render_document_structure(child, indent_level) for child in structure.children)
-        
+            return "\n".join(
+                self._render_document_structure(child, indent_level)
+                for child in structure.children
+            )
+
         # Build opening tag
         tag_name = structure.element_type
         attributes = self._format_attributes(structure.attributes)
-        
+
         # Add accessibility attributes
         if structure.aria_label:
             attributes += f' aria-label="{html.escape(structure.aria_label)}"'
-        
+
         if structure.role:
             attributes += f' role="{structure.role}"'
-        
+
         if structure.element_id:
             attributes += f' id="{structure.element_id}"'
-        
+
         # Self-closing tags
-        if tag_name in ['img', 'br', 'hr', 'input', 'meta', 'link']:
-            return f'{indent}<{tag_name}{attributes} />'
-        
+        if tag_name in ["img", "br", "hr", "input", "meta", "link"]:
+            return f"{indent}<{tag_name}{attributes} />"
+
         # Handle content and children
         content_parts = []
-        
+
         # Add text content
         if structure.content:
             escaped_content = html.escape(structure.content)
             content_parts.append(escaped_content)
-        
+
         # Add alt-text for figures
-        if tag_name == 'figure' and structure.alt_text:
-            figcaption = f'{indent}    <figcaption>{html.escape(structure.alt_text)}</figcaption>'
-            content_parts.append(f'\n{figcaption}')
-        
+        if tag_name == "figure" and structure.alt_text:
+            figcaption = f"{indent}    <figcaption>{html.escape(structure.alt_text)}</figcaption>"
+            content_parts.append(f"\n{figcaption}")
+
         # Add child elements
         if structure.children:
             children_html = []
@@ -567,69 +579,73 @@ h6 { font-size: 1em; font-weight: bold; }
                 child_html = self._render_document_structure(child, indent_level + 1)
                 if child_html.strip():
                     children_html.append(child_html)
-            
+
             if children_html:
                 content_parts.append(f'\n{"".join(children_html)}\n{indent}')
-        
+
         # Combine content
         if content_parts:
             content = "".join(content_parts)
-            return f'{indent}<{tag_name}{attributes}>{content}</{tag_name}>'
+            return f"{indent}<{tag_name}{attributes}>{content}</{tag_name}>"
         else:
-            return f'{indent}<{tag_name}{attributes}></{tag_name}>'
-    
-    def _format_attributes(self, attributes: Dict[str, str]) -> str:
+            return f"{indent}<{tag_name}{attributes}></{tag_name}>"
+
+    def _format_attributes(self, attributes: dict[str, str]) -> str:
         """Format HTML attributes string."""
         if not attributes:
             return ""
-        
+
         formatted_attrs = []
         for key, value in attributes.items():
             if value is not None:
                 escaped_value = html.escape(str(value))
                 formatted_attrs.append(f'{key}="{escaped_value}"')
-        
+
         return " " + " ".join(formatted_attrs) if formatted_attrs else ""
-    
-    def validate_html5_compliance(self, html_content: str) -> Dict[str, Any]:
+
+    def validate_html5_compliance(self, html_content: str) -> dict[str, Any]:
         """Validate HTML5 and accessibility compliance."""
         validation_results = {
-            'html5_valid': True,
-            'wcag_compliant': True,
-            'issues': [],
-            'warnings': [],
-            'accessibility_features': []
+            "html5_valid": True,
+            "wcag_compliant": True,
+            "issues": [],
+            "warnings": [],
+            "accessibility_features": [],
         }
-        
+
         # Basic HTML5 validation checks
-        required_elements = ['<!DOCTYPE html>', '<html', '<head>', '<title>', '<body>']
+        required_elements = ["<!DOCTYPE html>", "<html", "<head>", "<title>", "<body>"]
         for element in required_elements:
             if element not in html_content:
-                validation_results['html5_valid'] = False
-                validation_results['issues'].append(f"Missing required element: {element}")
-        
+                validation_results["html5_valid"] = False
+                validation_results["issues"].append(
+                    f"Missing required element: {element}"
+                )
+
         # Accessibility validation checks
         accessibility_checks = [
-            ('alt=', 'Images have alternative text'),
-            ('role=', 'ARIA roles are used'),
-            ('aria-label=', 'ARIA labels are provided'),
-            ('skip-link', 'Skip navigation is available'),
-            ('<h1>', 'Document has heading structure')
+            ("alt=", "Images have alternative text"),
+            ("role=", "ARIA roles are used"),
+            ("aria-label=", "ARIA labels are provided"),
+            ("skip-link", "Skip navigation is available"),
+            ("<h1>", "Document has heading structure"),
         ]
-        
+
         for check, feature in accessibility_checks:
             if check in html_content:
-                validation_results['accessibility_features'].append(feature)
-        
+                validation_results["accessibility_features"].append(feature)
+
         # Check for potential issues
-        if 'img' in html_content and 'alt=' not in html_content:
-            validation_results['warnings'].append("Images may be missing alt text")
-        
-        if html_content.count('<h1>') > 1:
-            validation_results['warnings'].append("Multiple h1 tags found - should have only one")
-        
+        if "img" in html_content and "alt=" not in html_content:
+            validation_results["warnings"].append("Images may be missing alt text")
+
+        if html_content.count("<h1>") > 1:
+            validation_results["warnings"].append(
+                "Multiple h1 tags found - should have only one"
+            )
+
         # Overall compliance
-        if validation_results['issues']:
-            validation_results['wcag_compliant'] = False
-        
+        if validation_results["issues"]:
+            validation_results["wcag_compliant"] = False
+
         return validation_results

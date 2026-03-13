@@ -18,6 +18,9 @@ dependencies = [
     "html5lib>=1.1",
 ]
 
+[tool.uv]
+package = false
+
 [tool.uv.workspace]
 members = [
     "packages/*",
@@ -38,3 +41,101 @@ dev = [
     "pytest>=9.0.2",
     "ruff>=0.15.5",
 ]
+
+# Ruff configuration
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+extend-exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "build/",
+    "dist/",
+    "*.egg-info/",
+    ".mypy_cache/",
+    ".pytest_cache/",
+    ".coverage",
+    "generated_documents/",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "UP",  # pyupgrade
+    "I",   # isort
+    "N",   # pep8-naming
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific rules
+]
+ignore = [
+    "E501",   # line too long (black handles this)
+    "B008",   # do not perform function calls in argument defaults
+    "RUF012", # mutable class attributes should be annotated
+]
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # allow unused imports in __init__.py
+"tests/*.py" = ["B018", "E501"]  # allow assert statements and long lines in tests
+
+[tool.ruff.lint.isort]
+known-first-party = ["cv_layer", "reasoning_agent", "reconstruction", "api"]
+force-single-line = false
+force-sort-within-sections = true
+
+# Black configuration  
+[tool.black]
+line-length = 88
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  \.git
+  | \.venv
+  | __pycache__
+  | build
+  | dist
+  | \.egg-info
+  | generated_documents
+)/
+'''
+
+# MyPy configuration
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+# Package-specific mypy settings
+[[tool.mypy.overrides]]
+module = [
+    "pdf2image.*",
+    "pytesseract.*", 
+    "reportlab.*",
+    "weasyprint.*",
+    "transformers.*",
+    "torch.*",
+    "torchvision.*",
+    "PIL.*",
+    "cv2.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
