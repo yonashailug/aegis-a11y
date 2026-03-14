@@ -1,0 +1,16 @@
+[project]
+name = "config"
+version = "0.1.0"
+description = "Configuration management for Aegis-A11y"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]

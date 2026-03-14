@@ -389,7 +389,7 @@ This ensures code quality and catches issues before they reach CI.
 
 ## License
 
-[Add your license information here]
+
 
 ## Related Documentation
 

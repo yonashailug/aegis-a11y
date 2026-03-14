@@ -3,8 +3,10 @@ import logging
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, status
+from config import get_settings
+from fastapi import FastAPI, HTTPException, status, UploadFile, File, Form
+from pydantic import BaseModel
+from typing import List, Optional
 
 from cv_layer import LayoutDecomposer, convert_pdf_to_images, extract_ocr_data
 from reasoning_agent import (
@@ -20,13 +22,147 @@ from reconstruction import (
     OutputFormat,
     ReconstructionInput,
 )
+from batch_processor import BatchProcessor, BatchStatus, DocumentStatus
+from progress_tracker import get_progress_tracker, OperationType, OperationStatus
+from cache_manager import get_cache_manager, CacheType, CacheStats
 
-# Load environment variables from .env file
-load_dotenv()
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Pydantic models for API requests/responses
+class BatchCreateRequest(BaseModel):
+    """Request model for creating a batch processing job."""
+    file_paths: List[str]
+    output_directory: Optional[str] = None
+
+
+class BatchStatusResponse(BaseModel):
+    """Response model for batch status."""
+    id: str
+    status: str
+    total_documents: int
+    processed_documents: int
+    failed_documents: int
+    progress_percentage: float
+    created_at: str
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    error_message: Optional[str] = None
+
+
+class DocumentStatusResponse(BaseModel):
+    """Response model for individual document status."""
+    id: str
+    original_filename: str
+    status: str
+    elements_extracted: int = 0
+    elements_analyzed: int = 0
+    processing_duration: float = 0.0
+    error_message: Optional[str] = None
+    output_files: dict = {}
+
+
+class BatchDetailResponse(BaseModel):
+    """Detailed response model for batch information."""
+    id: str
+    status: str
+    total_documents: int
+    processed_documents: int
+    failed_documents: int
+    progress_percentage: float
+    created_at: str
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    error_message: Optional[str] = None
+    documents: List[DocumentStatusResponse]
+
+
+# Progress tracking models
+class ProgressStepResponse(BaseModel):
+    """Response model for progress step."""
+    step_id: str
+    name: str
+    description: str
+    status: str
+    progress_percentage: float
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    error_message: Optional[str] = None
+    details: dict = {}
+
+
+class PerformanceMetricsResponse(BaseModel):
+    """Response model for performance metrics."""
+    processing_rate: float
+    estimated_completion_time: Optional[str] = None
+    memory_usage_mb: float
+    cpu_usage_percentage: float
+    api_calls_made: int
+    api_calls_cached: int
+
+
+class OperationProgressResponse(BaseModel):
+    """Response model for operation progress."""
+    operation_id: str
+    operation_type: str
+    name: str
+    description: str
+    status: str
+    overall_progress_percentage: float
+    created_at: str
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    total_steps: int
+    completed_steps: int
+    current_step: Optional[str] = None
+    steps: List[ProgressStepResponse] = []
+    error_message: Optional[str] = None
+    metadata: dict = {}
+    performance_metrics: PerformanceMetricsResponse
+
+
+# Cache management models
+class CacheStatsResponse(BaseModel):
+    """Response model for cache statistics."""
+    hits: int
+    misses: int
+    hit_rate_percent: float
+    evictions: int
+    total_size_bytes: int
+    api_calls_saved: int
+    estimated_cost_saved_usd: float
+    uptime_hours: float
+    memory_cache_entries: int
+    disk_cache_entries: int
+    memory_usage_mb: float
+    memory_limit_mb: float
+    by_type: dict = {}
+
+
+class CacheEntryResponse(BaseModel):
+    """Response model for cache entry information."""
+    key: str
+    cache_type: str
+    size_bytes: int
+    created_at: str
+    last_accessed: str
+    access_count: int
+    ttl_seconds: int
+    expired: bool
+    metadata: dict = {}
+
+
+class CacheClearRequest(BaseModel):
+    """Request model for clearing cache."""
+    cache_type: Optional[str] = None
+
+# Get centralized settings
+settings = get_settings()
+
+# Configure logging based on settings
+logging.basicConfig(
+    level=getattr(logging, settings.logging.level), format=settings.logging.format
+)
 logger = logging.getLogger(__name__)
+logger.setLevel(getattr(logging, settings.get_log_level_for_component("api")))
 
 
 def save_generated_documents(
@@ -34,19 +170,20 @@ def save_generated_documents(
 ) -> dict[str, str]:
     """Save generated documents to files and return file paths."""
 
-    # Create output directory relative to project root
-    project_root = Path(
-        __file__
-    ).parent.parent.parent  # Go up from api/main.py to project root
-    output_dir = project_root / "generated_documents"
-    output_dir.mkdir(exist_ok=True)
+    # Use configured output directory
+    output_dir = settings.output.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create timestamped subdirectory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Create timestamped subdirectory if enabled
     pdf_name = Path(sample_pdf_path).stem
-    session_dir = output_dir / f"{pdf_name}_{timestamp}"
+    if settings.output.create_timestamped_dirs:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        session_dir = output_dir / f"{pdf_name}_{timestamp}"
+    else:
+        session_dir = output_dir / pdf_name
     session_dir.mkdir(exist_ok=True)
 
+    project_root = Path(__file__).parent.parent.parent
     saved_files = {}
 
     for format_type, document in reconstruction_result.documents.items():
@@ -108,24 +245,39 @@ def save_generated_documents(
 
 
 app = FastAPI(
-    title="Aegis-A11y API",
+    title=settings.project_name + " API",
     description="Document accessibility analysis and decomposition API",
-    version="1.0.0",
+    version=settings.version,
+    debug=settings.api.debug,
 )
 
-# Initialize components with error handling
+# Initialize components with error handling using configuration
 try:
-    decomposer = LayoutDecomposer("microsoft/layoutlmv3-base")
-    logger.info("LayoutDecomposer initialized successfully")
+    decomposer = LayoutDecomposer(settings.models.layoutlm_model)
+    logger.info(
+        f"LayoutDecomposer initialized successfully with model: {settings.models.layoutlm_model}"
+    )
 except Exception as e:
     logger.error(f"Failed to initialize LayoutDecomposer: {e}")
     decomposer = None
 
 try:
-    # Initialize reasoning agent components
+    # Initialize reasoning agent components with configuration
     context_processor = ContextProcessor()
     alt_text_generator = AltTextGenerator()
-    semantic_reasoner = SemanticReasoner()
+
+    # Initialize semantic reasoner with configured OpenAI settings
+    openai_api_key = settings.get_openai_api_key()
+    if openai_api_key:
+        semantic_reasoner = SemanticReasoner(
+            api_key=openai_api_key,
+            model=settings.models.openai_model,
+            max_tokens=settings.models.openai_max_tokens,
+            temperature=settings.models.openai_temperature,
+        )
+    else:
+        semantic_reasoner = SemanticReasoner()
+
     verifier = DeterministicVerifier()
     element_filter = ElementFilter()
     logger.info("Reasoning agent components initialized successfully")
@@ -145,23 +297,110 @@ except Exception as e:
     logger.error(f"Failed to initialize reconstruction engine: {e}")
     reconstruction_engine = None
 
+try:
+    # Initialize batch processor
+    batch_processor = BatchProcessor()
+    logger.info("Batch processor initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize batch processor: {e}")
+    batch_processor = None
+
+try:
+    # Initialize progress tracker
+    progress_tracker = get_progress_tracker()
+    logger.info("Progress tracker initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize progress tracker: {e}")
+    progress_tracker = None
+
+try:
+    # Initialize cache manager
+    cache_manager = get_cache_manager()
+    logger.info("Cache manager initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize cache manager: {e}")
+    cache_manager = None
+
 
 @app.get("/")
 async def health_check():
     """Health check endpoint to verify API is running."""
     return {
         "status": "ok",
-        "message": "Aegis-A11y API is running",
-        "decomposer_loaded": decomposer is not None,
-        "reasoning_agent_loaded": all(
-            [
-                context_processor is not None,
-                alt_text_generator is not None,
-                semantic_reasoner is not None,
-                verifier is not None,
-            ]
-        ),
-        "reconstruction_engine_loaded": reconstruction_engine is not None,
+        "message": f"{settings.project_name} API is running",
+        "version": settings.version,
+        "environment": settings.environment.value,
+        "components": {
+            "decomposer_loaded": decomposer is not None,
+            "reasoning_agent_loaded": all(
+                [
+                    context_processor is not None,
+                    alt_text_generator is not None,
+                    semantic_reasoner is not None,
+                    verifier is not None,
+                ]
+            ),
+            "reconstruction_engine_loaded": reconstruction_engine is not None,
+            "batch_processor_loaded": batch_processor is not None,
+            "progress_tracker_loaded": progress_tracker is not None,
+            "cache_manager_loaded": cache_manager is not None,
+        },
+        "configuration": {
+            "filtering_enabled": settings.processing.enable_filtering,
+            "max_pages": settings.processing.max_pages,
+            "output_formats": {
+                "html5": settings.output.enable_html5,
+                "pdf_ua": settings.output.enable_pdf_ua,
+            },
+            "batch_processing": {
+                "enabled": settings.processing.enable_batch_processing,
+                "max_batch_size": settings.processing.max_batch_size,
+                "max_concurrent_pdfs": settings.processing.max_concurrent_pdfs,
+            },
+        },
+    }
+
+
+@app.get("/api/v1/config")
+async def get_configuration():
+    """Get current API configuration (non-sensitive values only)."""
+    return {
+        "environment": settings.environment.value,
+        "version": settings.version,
+        "api": {
+            "host": settings.api.host,
+            "port": settings.api.port,
+            "debug": settings.api.debug,
+            "request_timeout": settings.api.request_timeout,
+        },
+        "processing": {
+            "max_pdf_size": settings.processing.max_pdf_size,
+            "max_pages": settings.processing.max_pages,
+            "pdf_dpi": settings.processing.pdf_dpi,
+            "enable_filtering": settings.processing.enable_filtering,
+            "min_confidence_threshold": settings.processing.min_confidence_threshold,
+            "enable_batch_processing": settings.processing.enable_batch_processing,
+            "max_batch_size": settings.processing.max_batch_size,
+            "max_concurrent_pdfs": settings.processing.max_concurrent_pdfs,
+            "batch_timeout": settings.processing.batch_timeout,
+        },
+        "models": {
+            "layoutlm_model": settings.models.layoutlm_model,
+            "openai_model": settings.models.openai_model,
+            "openai_max_tokens": settings.models.openai_max_tokens,
+            "openai_temperature": settings.models.openai_temperature,
+            "cache_models": settings.models.cache_models,
+        },
+        "output": {
+            "enable_html5": settings.output.enable_html5,
+            "enable_pdf_ua": settings.output.enable_pdf_ua,
+            "create_timestamped_dirs": settings.output.create_timestamped_dirs,
+        },
+        "performance": {
+            "max_worker_threads": settings.performance.max_worker_threads,
+            "enable_result_cache": settings.performance.enable_result_cache,
+            "cache_ttl": settings.performance.cache_ttl,
+        },
     }
 
 
@@ -241,13 +480,13 @@ async def decompose_document():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Required file not found: {e!s}",
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Decomposition failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Document decomposition failed: {e!s}",
-        )
+        ) from e
 
 
 @app.post("/api/v1/analyze")
@@ -440,11 +679,11 @@ async def analyze_document():
                     else 0
                 ),
                 "subject_areas_detected": list(
-                    set(
+                    {
                         output.get("detected_subject_area")
                         for output in reasoning_outputs
                         if output.get("detected_subject_area")
-                    )
+                    }
                 ),
             },
         }
@@ -457,7 +696,7 @@ async def analyze_document():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Document analysis pipeline failed: {e!s}",
-        )
+        ) from e
 
 
 @app.post("/api/v1/reconstruct")
@@ -705,6 +944,542 @@ async def reconstruct_document():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Document reconstruction pipeline failed: {e!s}",
+        ) from e
+
+
+@app.post("/api/v1/batch/create", response_model=BatchStatusResponse)
+async def create_batch(request: BatchCreateRequest):
+    """
+    Create a new batch processing job for multiple PDF documents.
+    """
+    try:
+        if not batch_processor:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Batch processor not available"
+            )
+        
+        # Create the batch
+        batch_id = batch_processor.create_batch(
+            file_paths=request.file_paths,
+            output_dir=request.output_directory
+        )
+        
+        # Get initial status
+        batch_job = batch_processor.get_batch_status(batch_id)
+        
+        return BatchStatusResponse(
+            id=batch_job.id,
+            status=batch_job.status.value,
+            total_documents=batch_job.total_documents,
+            processed_documents=batch_job.processed_documents,
+            failed_documents=batch_job.failed_documents,
+            progress_percentage=batch_job.progress_percentage,
+            created_at=batch_job.created_at.isoformat(),
+            started_at=batch_job.started_at.isoformat() if batch_job.started_at else None,
+            completed_at=batch_job.completed_at.isoformat() if batch_job.completed_at else None,
+            error_message=batch_job.error_message
+        )
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Failed to create batch: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create batch: {str(e)}"
+        )
+
+
+@app.post("/api/v1/batch/{batch_id}/start")
+async def start_batch_processing(batch_id: str):
+    """
+    Start processing a created batch job.
+    """
+    try:
+        if not batch_processor:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Batch processor not available"
+            )
+        
+        # Start processing asynchronously
+        import asyncio
+        task = asyncio.create_task(batch_processor.process_batch(batch_id))
+        
+        return {"message": f"Batch {batch_id} processing started", "batch_id": batch_id}
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Failed to start batch processing: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start batch processing: {str(e)}"
+        )
+
+
+@app.get("/api/v1/batch/{batch_id}/status", response_model=BatchStatusResponse)
+async def get_batch_status(batch_id: str):
+    """
+    Get current status of a batch processing job.
+    """
+    try:
+        if not batch_processor:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Batch processor not available"
+            )
+        
+        batch_job = batch_processor.get_batch_status(batch_id)
+        
+        if not batch_job:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Batch {batch_id} not found"
+            )
+        
+        return BatchStatusResponse(
+            id=batch_job.id,
+            status=batch_job.status.value,
+            total_documents=batch_job.total_documents,
+            processed_documents=batch_job.processed_documents,
+            failed_documents=batch_job.failed_documents,
+            progress_percentage=batch_job.progress_percentage,
+            created_at=batch_job.created_at.isoformat(),
+            started_at=batch_job.started_at.isoformat() if batch_job.started_at else None,
+            completed_at=batch_job.completed_at.isoformat() if batch_job.completed_at else None,
+            error_message=batch_job.error_message
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get batch status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get batch status: {str(e)}"
+        )
+
+
+@app.get("/api/v1/batch/{batch_id}/details", response_model=BatchDetailResponse)
+async def get_batch_details(batch_id: str):
+    """
+    Get detailed information about a batch processing job including individual document statuses.
+    """
+    try:
+        if not batch_processor:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Batch processor not available"
+            )
+        
+        batch_job = batch_processor.get_batch_status(batch_id)
+        
+        if not batch_job:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Batch {batch_id} not found"
+            )
+        
+        # Convert documents to response format
+        document_responses = []
+        for doc in batch_job.documents:
+            document_responses.append(DocumentStatusResponse(
+                id=doc.id,
+                original_filename=doc.original_filename,
+                status=doc.status.value,
+                elements_extracted=doc.elements_extracted,
+                elements_analyzed=doc.elements_analyzed,
+                processing_duration=doc.processing_duration,
+                error_message=doc.error_message,
+                output_files=doc.output_files
+            ))
+        
+        return BatchDetailResponse(
+            id=batch_job.id,
+            status=batch_job.status.value,
+            total_documents=batch_job.total_documents,
+            processed_documents=batch_job.processed_documents,
+            failed_documents=batch_job.failed_documents,
+            progress_percentage=batch_job.progress_percentage,
+            created_at=batch_job.created_at.isoformat(),
+            started_at=batch_job.started_at.isoformat() if batch_job.started_at else None,
+            completed_at=batch_job.completed_at.isoformat() if batch_job.completed_at else None,
+            error_message=batch_job.error_message,
+            documents=document_responses
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get batch details: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get batch details: {str(e)}"
+        )
+
+
+@app.get("/api/v1/batch", response_model=List[BatchStatusResponse])
+async def list_batches():
+    """
+    List all active batch processing jobs.
+    """
+    try:
+        if not batch_processor:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Batch processor not available"
+            )
+        
+        batches = batch_processor.list_active_batches()
+        
+        return [
+            BatchStatusResponse(
+                id=batch.id,
+                status=batch.status.value,
+                total_documents=batch.total_documents,
+                processed_documents=batch.processed_documents,
+                failed_documents=batch.failed_documents,
+                progress_percentage=batch.progress_percentage,
+                created_at=batch.created_at.isoformat(),
+                started_at=batch.started_at.isoformat() if batch.started_at else None,
+                completed_at=batch.completed_at.isoformat() if batch.completed_at else None,
+                error_message=batch.error_message
+            )
+            for batch in batches
+        ]
+        
+    except Exception as e:
+        logger.error(f"Failed to list batches: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list batches: {str(e)}"
+        )
+
+
+@app.delete("/api/v1/batch/{batch_id}")
+async def cancel_batch(batch_id: str):
+    """
+    Cancel a running batch processing job.
+    """
+    try:
+        if not batch_processor:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Batch processor not available"
+            )
+        
+        success = batch_processor.cancel_batch(batch_id)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Batch {batch_id} not found or not cancellable"
+            )
+        
+        return {"message": f"Batch {batch_id} cancelled successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to cancel batch: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to cancel batch: {str(e)}"
+        )
+
+
+@app.get("/api/v1/progress/{operation_id}", response_model=OperationProgressResponse)
+async def get_operation_progress(operation_id: str):
+    """
+    Get detailed progress information for a long-running operation.
+    """
+    try:
+        if not progress_tracker:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Progress tracker not available"
+            )
+        
+        operation = progress_tracker.get_operation_progress(operation_id)
+        
+        if not operation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Operation {operation_id} not found"
+            )
+        
+        # Convert steps to response format
+        steps_response = []
+        for step in operation.steps:
+            steps_response.append(ProgressStepResponse(
+                step_id=step.step_id,
+                name=step.name,
+                description=step.description,
+                status=step.status.value,
+                progress_percentage=step.progress_percentage,
+                start_time=step.start_time.isoformat() if step.start_time else None,
+                end_time=step.end_time.isoformat() if step.end_time else None,
+                error_message=step.error_message,
+                details=step.details
+            ))
+        
+        # Convert performance metrics
+        perf_metrics = PerformanceMetricsResponse(
+            processing_rate=operation.performance_metrics.processing_rate,
+            estimated_completion_time=operation.performance_metrics.estimated_completion_time.isoformat() 
+                if operation.performance_metrics.estimated_completion_time else None,
+            memory_usage_mb=operation.performance_metrics.memory_usage_mb,
+            cpu_usage_percentage=operation.performance_metrics.cpu_usage_percentage,
+            api_calls_made=operation.performance_metrics.api_calls_made,
+            api_calls_cached=operation.performance_metrics.api_calls_cached,
+        )
+        
+        return OperationProgressResponse(
+            operation_id=operation.operation_id,
+            operation_type=operation.operation_type.value,
+            name=operation.name,
+            description=operation.description,
+            status=operation.status.value,
+            overall_progress_percentage=operation.overall_progress_percentage,
+            created_at=operation.created_at.isoformat(),
+            started_at=operation.started_at.isoformat() if operation.started_at else None,
+            completed_at=operation.completed_at.isoformat() if operation.completed_at else None,
+            total_steps=operation.total_steps,
+            completed_steps=operation.completed_steps,
+            current_step=operation.current_step,
+            steps=steps_response,
+            error_message=operation.error_message,
+            metadata=operation.metadata,
+            performance_metrics=perf_metrics
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get operation progress: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get operation progress: {str(e)}"
+        )
+
+
+@app.get("/api/v1/progress", response_model=List[OperationProgressResponse])
+async def list_active_operations():
+    """
+    List all active operations being tracked.
+    """
+    try:
+        if not progress_tracker:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Progress tracker not available"
+            )
+        
+        operations = progress_tracker.list_active_operations()
+        
+        responses = []
+        for operation in operations:
+            # Convert steps to response format
+            steps_response = []
+            for step in operation.steps:
+                steps_response.append(ProgressStepResponse(
+                    step_id=step.step_id,
+                    name=step.name,
+                    description=step.description,
+                    status=step.status.value,
+                    progress_percentage=step.progress_percentage,
+                    start_time=step.start_time.isoformat() if step.start_time else None,
+                    end_time=step.end_time.isoformat() if step.end_time else None,
+                    error_message=step.error_message,
+                    details=step.details
+                ))
+            
+            # Convert performance metrics
+            perf_metrics = PerformanceMetricsResponse(
+                processing_rate=operation.performance_metrics.processing_rate,
+                estimated_completion_time=operation.performance_metrics.estimated_completion_time.isoformat() 
+                    if operation.performance_metrics.estimated_completion_time else None,
+                memory_usage_mb=operation.performance_metrics.memory_usage_mb,
+                cpu_usage_percentage=operation.performance_metrics.cpu_usage_percentage,
+                api_calls_made=operation.performance_metrics.api_calls_made,
+                api_calls_cached=operation.performance_metrics.api_calls_cached,
+            )
+            
+            responses.append(OperationProgressResponse(
+                operation_id=operation.operation_id,
+                operation_type=operation.operation_type.value,
+                name=operation.name,
+                description=operation.description,
+                status=operation.status.value,
+                overall_progress_percentage=operation.overall_progress_percentage,
+                created_at=operation.created_at.isoformat(),
+                started_at=operation.started_at.isoformat() if operation.started_at else None,
+                completed_at=operation.completed_at.isoformat() if operation.completed_at else None,
+                total_steps=operation.total_steps,
+                completed_steps=operation.completed_steps,
+                current_step=operation.current_step,
+                steps=steps_response,
+                error_message=operation.error_message,
+                metadata=operation.metadata,
+                performance_metrics=perf_metrics
+            ))
+        
+        return responses
+        
+    except Exception as e:
+        logger.error(f"Failed to list active operations: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list active operations: {str(e)}"
+        )
+
+
+@app.delete("/api/v1/progress/{operation_id}")
+async def cancel_operation(operation_id: str):
+    """
+    Cancel a running operation.
+    """
+    try:
+        if not progress_tracker:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Progress tracker not available"
+            )
+        
+        success = progress_tracker.cancel_operation(operation_id)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Operation {operation_id} not found or not cancellable"
+            )
+        
+        return {"message": f"Operation {operation_id} cancelled successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to cancel operation: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to cancel operation: {str(e)}"
+        )
+
+
+@app.get("/api/v1/cache/stats", response_model=CacheStatsResponse)
+async def get_cache_stats():
+    """
+    Get comprehensive cache performance statistics.
+    """
+    try:
+        if not cache_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Cache manager not available"
+            )
+        
+        stats = cache_manager.get_stats()
+        
+        return CacheStatsResponse(**stats)
+        
+    except Exception as e:
+        logger.error(f"Failed to get cache stats: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get cache stats: {str(e)}"
+        )
+
+
+@app.get("/api/v1/cache/entries", response_model=List[CacheEntryResponse])
+async def get_cache_entries(limit: int = 50):
+    """
+    Get information about cached entries.
+    """
+    try:
+        if not cache_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Cache manager not available"
+            )
+        
+        entries_info = cache_manager.get_cache_info(limit)
+        
+        return [CacheEntryResponse(**entry) for entry in entries_info]
+        
+    except Exception as e:
+        logger.error(f"Failed to get cache entries: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get cache entries: {str(e)}"
+        )
+
+
+@app.post("/api/v1/cache/clear")
+async def clear_cache(request: CacheClearRequest):
+    """
+    Clear cache entries by type or all entries.
+    """
+    try:
+        if not cache_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Cache manager not available"
+            )
+        
+        cache_type = None
+        if request.cache_type:
+            try:
+                cache_type = CacheType(request.cache_type)
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid cache type: {request.cache_type}"
+                )
+        
+        cache_manager.clear(cache_type)
+        
+        message = f"Cleared {request.cache_type} cache" if request.cache_type else "Cleared all cache"
+        return {"message": message}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to clear cache: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to clear cache: {str(e)}"
+        )
+
+
+@app.post("/api/v1/cache/cleanup")
+async def cleanup_cache():
+    """
+    Manually trigger cache cleanup (remove expired entries).
+    """
+    try:
+        if not cache_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Cache manager not available"
+            )
+        
+        cache_manager.cleanup_expired()
+        
+        return {"message": "Cache cleanup completed"}
+        
+    except Exception as e:
+        logger.error(f"Failed to cleanup cache: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to cleanup cache: {str(e)}"
         )
 
 
