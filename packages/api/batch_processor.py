@@ -16,8 +16,8 @@ from dataclasses import dataclass
 from enum import Enum
 
 from config import get_settings
-from progress_tracker import get_progress_tracker, OperationType, OperationStatus
-from cache_manager import get_cache_manager, CacheType
+from .progress_tracker import get_progress_tracker, OperationType, OperationStatus
+from .cache_manager import get_cache_manager, CacheType
 from cv_layer import LayoutDecomposer, convert_pdf_to_images, extract_ocr_data
 from reasoning_agent import (
     AltTextGenerator,
